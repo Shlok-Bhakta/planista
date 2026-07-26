@@ -66,7 +66,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = io.WriteString(w, landingPage)
+		_, _ = io.WriteString(w, strings.ReplaceAll(landingPage, "THIS_ORIGIN", s.config.BaseURL))
 	case http.MethodPost:
 		s.handleCreate(w, r)
 	default:
