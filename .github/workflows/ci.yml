@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: shlok-bhakta/planista
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version: "1.26.5"
+          cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Verify static binary
+        run: |
+          CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -buildid=' -o planista ./cmd/planista
+          file planista | grep -F 'statically linked'
+
+      - name: Build scratch image
+        run: docker build --tag planista:test .
+
+      - name: Smoke test container
+        shell: bash
+        run: |
+          set -euo pipefail
+          volume=planista-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+          container=planista-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+          docker volume create "$volume"
+          cleanup() {
+            docker rm --force "$container" >/dev/null 2>&1 || true
+            docker volume rm "$volume" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run --detach \
+            --name "$container" \
+            --publish 127.0.0.1:18080:8080 \
+            --volume "$volume:/data" \
+            --env PLANISTA_BASE_URL=http://127.0.0.1:18080 \
+            planista:test
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$container"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          html='<!doctype html><title>CI</title><h1>persist me</h1>'
+          permalink=$(curl --fail-with-body --silent --show-error \
+            -H 'Content-Type: text/html' \
+            --data-binary "$html" \
+            http://127.0.0.1:18080/)
+          test "$(curl --fail --silent "$permalink")" = "$html"
+
+          docker restart "$container" >/dev/null
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          test "$(curl --fail --silent "$permalink")" = "$html"
+
+          wipe_url=$(docker logs "$container" 2>&1 \
+            | grep 'PLANISTA WIPE' \
+            | tail -n 1 \
+            | sed -n "s/.*POST '\\([^']*\\)'.*/\\1/p")
+          test -n "$wipe_url"
+          curl --fail --silent --request POST "$wipe_url"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$permalink")" = "404"
+
+  publish:
+    if: github.event_name == 'push'
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.2.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.5.1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+
+      - name: Verify published platforms
+        env:
+          IMAGE_TAGS: ${{ steps.metadata.outputs.tags }}
+        run: |
+          first_tag=$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)
+          docker buildx imagetools inspect "$first_tag" > manifest.txt
+          grep -F 'linux/amd64' manifest.txt
+          grep -F 'linux/arm64' manifest.txt
