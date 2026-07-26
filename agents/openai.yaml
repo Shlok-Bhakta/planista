@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planista"
+  short_description: "Publish HTML plans as short public links"
+  default_prompt: "Use $planista to publish this HTML plan and return its permalink."
