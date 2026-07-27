@@ -17,7 +17,7 @@ It is a single Go binary, a SQLite file, and a `scratch` container. There are no
 
 ## Run with Compose
 
-The included Compose file uses the published image and bind-mounts the database so plans survive container restarts:
+The included Compose file uses the published image and bind-mounts the database so plans survive container restarts. The repository includes the empty `data` directory so the container runtime does not create it with root ownership:
 
 ```console
 mkdir -p data
