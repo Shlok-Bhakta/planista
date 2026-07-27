@@ -3,7 +3,6 @@ services:
     image: ghcr.io/shlok-bhakta/planista:latest
     container_name: planista
     restart: unless-stopped
-    user: "${PLANISTA_UID:-1000}:${PLANISTA_GID:-1000}"
     ports:
       - "8080:8080"
     environment:
@@ -12,4 +11,7 @@ services:
       PLANISTA_MAX_PLAN_BYTES: "${PLANISTA_MAX_PLAN_BYTES:-1048576}"
       PLANISTA_MAX_PLANS: "${PLANISTA_MAX_PLANS:-1000}"
     volumes:
-      - "./data:/data"
+      - "planista-data:/data"
+
+volumes:
+  planista-data:

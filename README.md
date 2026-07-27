@@ -17,18 +17,13 @@ It is a single Go binary, a SQLite file, and a `scratch` container. There are no
 
 ## Run with Compose
 
-The included Compose file uses the published image and bind-mounts the database so plans survive container restarts. The repository includes the empty `data` directory so the container runtime does not create it with root ownership:
+The included Compose file uses the published image and stores the database in a named volume so plans survive container restarts:
 
 ```console
-mkdir -p data
 docker compose up -d
 ```
 
-The container runs as your configured host user so it can write the bind mount. UID and GID default to `1000`; override them when needed:
-
-```console
-PLANISTA_UID=$(id -u) PLANISTA_GID=$(id -g) docker compose up -d
-```
+The image runs as an unprivileged user, and the container runtime initializes the volume with matching ownership. This works with both Docker Compose and rootless Podman Compose without host-directory permission changes.
 
 For an internet-facing deployment, set the exact external origin used in returned permalinks:
 

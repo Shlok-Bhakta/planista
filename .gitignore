@@ -1,5 +1,4 @@
-/data/*
-!/data/.gitkeep
+/data/
 /planista
 *.db
 *.db-shm
