@@ -46,7 +46,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends musl-tools
           rustup target add x86_64-unknown-linux-musl
           cargo build --locked --release --target x86_64-unknown-linux-musl
-          file target/x86_64-unknown-linux-musl/release/planista | grep -F 'statically linked'
+          file target/x86_64-unknown-linux-musl/release/planista | grep -E 'static(-pie|ally) linked'
 
       - name: Build scratch image
         run: docker build --tag planista:test .
