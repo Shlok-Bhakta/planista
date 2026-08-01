@@ -1,6 +1,6 @@
+/target/
 /data/
-/planista
 *.db
-*.db-shm
-*.db-wal
+*.db-*
+/planista
 coverage.out

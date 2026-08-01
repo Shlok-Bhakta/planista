@@ -10,7 +10,7 @@ Publish HTML only when the user intends it to be public. Treat every permalink a
 ## Publish a document
 
 1. Obtain the Planista origin from the user or the `PLANISTA_URL` environment variable. Do not guess a server URL.
-2. Produce a complete HTML document. Keep it under the server's default 1 MiB limit unless the deployment documents another limit.
+2. Produce a complete HTML document. Keep it under the server's default 10 MiB limit unless the deployment documents another limit.
 3. Post the raw document and capture the returned permalink:
 
 ```bash

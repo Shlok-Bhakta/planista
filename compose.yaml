@@ -8,7 +8,7 @@ services:
     environment:
       PLANISTA_BASE_URL: "${PLANISTA_BASE_URL:-http://localhost:8080}"
       PLANISTA_DB_PATH: "/data/planista.db"
-      PLANISTA_MAX_PLAN_BYTES: "${PLANISTA_MAX_PLAN_BYTES:-1048576}"
+      PLANISTA_MAX_PLAN_BYTES: "${PLANISTA_MAX_PLAN_BYTES:-10485760}"
       PLANISTA_MAX_PLANS: "${PLANISTA_MAX_PLANS:-1000}"
     volumes:
       - "planista-data:/data"

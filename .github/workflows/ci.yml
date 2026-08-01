@@ -22,25 +22,31 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
 
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
-          go-version: "1.26.5"
-          cache: true
+          components: rustfmt, clippy
+          targets: x86_64-unknown-linux-musl
 
-      - name: Verify modules
-        run: go mod verify
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2.8.1
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Test
-        run: go test -race ./...
-
-      - name: Vet
-        run: go vet ./...
+        run: cargo test --locked
 
       - name: Verify static binary
         run: |
-          CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -buildid=' -o planista ./cmd/planista
-          file planista | grep -F 'statically linked'
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --locked --release --target x86_64-unknown-linux-musl
+          file target/x86_64-unknown-linux-musl/release/planista | grep -F 'statically linked'
 
       - name: Build scratch image
         run: docker build --tag planista:test .
@@ -82,6 +88,14 @@ jobs:
             --data-binary "$html" \
             http://127.0.0.1:18080/)
           test "$(curl --fail --silent "$permalink")" = "$html"
+
+          asset='0123456789'
+          asset_url=$(curl --fail-with-body --silent --show-error \
+            -H 'Content-Type: video/mp4' \
+            --data-binary "$asset" \
+            http://127.0.0.1:18080/)
+          test "$(curl --fail --silent --range 2-5 "$asset_url")" = "2345"
+          test "$(curl --fail --silent --head --write-out '%{content_type}' --output /dev/null "$asset_url")" = "video/mp4"
 
           docker restart "$container" >/dev/null
           for attempt in $(seq 1 30); do

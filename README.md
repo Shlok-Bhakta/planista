@@ -1,6 +1,6 @@
 # Planista
 
-Planista turns an HTML document into a short public permalink.
+Planista turns any file into a short public permalink. HTML documents can reference separately uploaded images, videos, scripts, stylesheets, fonts, and other assets by permalink.
 
 ```console
 $ curl --fail-with-body \
@@ -10,10 +10,10 @@ $ curl --fail-with-body \
 https://plans.example.com/kr5YQ1Q8c0FQ7tJx
 ```
 
-It is a single Go binary, a SQLite file, and a `scratch` container. There are no accounts, upload tokens, templates, or JavaScript bundles.
+It is a single Rust binary, a SQLite file, and a `scratch` container. There are no accounts, upload tokens, templates, or JavaScript bundles.
 
 > [!WARNING]
-> Planista accepts unauthenticated uploads and serves arbitrary active HTML, including JavaScript. Run it on a dedicated untrusted-content origin with no trusted cookies or other applications. A permalink is unlisted, not private.
+> Planista accepts unauthenticated uploads and serves arbitrary content, including active HTML and JavaScript. Run it on a dedicated untrusted-content origin with no trusted cookies or other applications. A permalink is unlisted, not private.
 
 ## Run with Compose
 
@@ -37,7 +37,7 @@ Terminate TLS and add any desired network-level rate limiting at a reverse proxy
 
 ### Publish
 
-`POST /` with a raw `text/html` body:
+`POST /` with a raw body and its `Content-Type`:
 
 ```console
 curl --fail-with-body \
@@ -48,16 +48,29 @@ curl --fail-with-body \
 
 A successful upload returns `201 Created`, puts the permalink in the `Location` header, and writes the same URL as a plain-text body. IDs are 16-character unpadded base64url strings containing 96 random bits.
 
+For example, upload a video and use the returned permalink in another uploaded HTML document:
+
+```console
+video_url=$(curl --fail-with-body \
+  -H 'Content-Type: video/mp4' \
+  --data-binary @demo.mp4 \
+  http://localhost:8080/)
+```
+
+```html
+<video controls src="VIDEO_PERMALINK"></video>
+```
+
 Uploads return:
 
 - `400` for an empty body
-- `413` when the HTML exceeds `PLANISTA_MAX_PLAN_BYTES`
-- `415` unless the media type is `text/html`
+- `413` when the payload exceeds `PLANISTA_MAX_PLAN_BYTES`; the response suggests compression and mentions `ffmpeg` for video
+- `415` when `Content-Type` is missing or invalid
 - `507` when `PLANISTA_MAX_PLANS` have been retained
 
 ### View
 
-`GET /{id}` returns the stored bytes as active HTML. `HEAD /{id}` returns the same response headers without the body. Plans cannot be listed, edited, or deleted individually.
+`GET /{id}` returns the stored bytes with the media type supplied during upload. `HEAD /{id}` returns the same response headers without the body. Single HTTP byte ranges are supported with `Range: bytes=...`, allowing video and audio seeking. Payloads cannot be listed, edited, or deleted individually.
 
 ### Health
 
@@ -86,7 +99,7 @@ Run the current command to delete all plans, truncate the SQLite WAL, and reclai
 | `PLANISTA_BASE_URL` | required | Absolute HTTP(S) origin used for returned links |
 | `PLANISTA_LISTEN_ADDR` | `:8080` | Server listen address |
 | `PLANISTA_DB_PATH` | `/data/planista.db` | SQLite database path |
-| `PLANISTA_MAX_PLAN_BYTES` | `1048576` | Maximum bytes in one HTML document |
+| `PLANISTA_MAX_PLAN_BYTES` | `10485760` | Maximum bytes in one payload |
 | `PLANISTA_MAX_PLANS` | `1000` | Maximum retained plans before a wipe |
 
 `PLANISTA_BASE_URL` is required and cannot contain credentials, a path, query, or fragment. Planista never trusts the request `Host` header when constructing links.
@@ -97,15 +110,15 @@ This repository is also a valid Codex skill. [`SKILL.md`](SKILL.md) gives an age
 
 ## Develop
 
-Planista requires Go 1.26.5.
+Planista requires Rust 1.97.1.
 
 ```console
-go test -race ./...
-go vet ./...
-CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -buildid=' ./cmd/planista
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --locked --release --target x86_64-unknown-linux-musl
 ```
 
-The only runtime dependency is SQLite through the pure-Go `modernc.org/sqlite` driver. GitHub Actions tests the service, smoke-tests the container, and publishes `linux/amd64` and `linux/arm64` images to GHCR.
+SQLite is linked statically via `rusqlite` with the `bundled` feature. GitHub Actions tests the service, smoke-tests the container, and publishes `linux/amd64` and `linux/arm64` images to GHCR.
 
 ## License
 
