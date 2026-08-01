@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM rust:1.97.1-bookworm AS build
+FROM rust:1.97.1-bookworm AS build
 
 ARG TARGETARCH
 WORKDIR /src
@@ -13,13 +13,7 @@ RUN apt-get update \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && rustup target add "$(cat /target.txt)" \
- && if [ "$TARGETARCH" = "arm64" ]; then \
-      apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu; \
-    fi \
  && rm -rf /var/lib/apt/lists/*
-
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
-ENV CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY src ./src
